@@ -1,169 +1,118 @@
 #include <bits/stdc++.h>
+
 using namespace std;
 
-using i64 = long long;
-template<class Info, class Tag>
+const int N = 1e5 + 5;
+template <int N, typename T = int> 
 struct LazySegmentTree {
-    int n;
-    std::vector<Info> info;
-    std::vector<Tag> tag;
-    LazySegmentTree() : n(0) {}
-    LazySegmentTree(int n_, Info v_ = Info()) {
-        init(n_, v_);
+    constexpr static T max_T = numeric_limits<T>::max();
+    constexpr static T min_T = numeric_limits<T>::min();
+    constexpr static int H = int(ceil(log2(N))), _N = 1 << H;
+
+    struct node {
+        T _sum, _min, _max;
+    } tree[2 * _N];
+
+    node merge(node x, node y) {
+        return {x._sum + y._sum, std::min(x._min, y._min), std::max(x._max, y._max)};
     }
-    template<class T>
-    LazySegmentTree(std::vector<T> init_) {
-        init(init_);
+
+    T u[2 * _N];
+    bool f[2 * _N];
+    int a[2 * _N], b[2 * _N];
+    LazySegmentTree() {
+        fill(tree, tree + 2 * _N, node({0, 0, 0}));
+        fill(f, f + 2 * _N, 0);
+        fill(u, u + 2 * _N, 0);
+        iota(a + _N, a + 2 * _N, 0);
+        iota(b + _N, b + 2 * _N, 0);
+        for (int i = _N - 1; i > 0; i--) {
+            a[i] = a[2 * i];
+            b[i] = b[2 * i + 1];
+        }
     }
-    void init(int n_, Info v_ = Info()) {
-        init(std::vector(n_, v_));
+
+    void apply(int i, T x, bool _insert) {
+        if (_insert) {
+            u[i] = x;
+            f[i] = 1;
+        }
+        else {
+            u[i] += x;
+        }
     }
-    template<class T>
-    void init(std::vector<T> init_) {
-        n = init_.size();
-        info.assign(4 << std::__lg(n), Info());
-        tag.assign(4 << std::__lg(n), Tag());
-        std::function<void(int, int, int)> build = [&](int p, int l, int r) {
-            if (r - l == 1) {
-                info[p] = init_[l];
-                return;
-            }
-            int m = (l + r) / 2;
-            build(2 * p, l, m);
-            build(2 * p + 1, m, r);
-            pull(p);
-        };
-        build(1, 0, n);
-    }
-    void pull(int p) {
-        info[p] = info[2 * p] + info[2 * p + 1];
-    }
-    void apply(int p, const Tag &v) {
-        info[p].apply(v);
-        tag[p].apply(v);
-    }
-    void push(int p) {
-        apply(2 * p, tag[p]);
-        apply(2 * p + 1, tag[p]);
-        tag[p] = Tag();
-    }
-    void modify(int p, int l, int r, int x, const Info &v) {
-        if (r - l == 1) {
-            info[p] = v;
+
+    void push(int i) {
+        if (!f[i] && !u[i]) {
             return;
         }
-        int m = (l + r) / 2;
-        push(p);
-        if (x < m) {
-            modify(2 * p, l, m, x, v);
-        } else {
-            modify(2 * p + 1, m, r, x, v);
+        if (f[i]) {
+            tree[i] = {0, 0, 0};
         }
-        pull(p);
-    }
-    void modify(int p, const Info &v) {
-        modify(1, 0, n, p, v);
-    }
-    Info rangeQuery(int p, int l, int r, int x, int y) {
-        if (l >= y || r <= x) {
-            return Info();
+        tree[i]._sum += u[i] * (b[i] - a[i] + 1);
+        tree[i]._min += u[i];
+        tree[i]._max += u[i];
+        if (i < _N) {
+            apply(2 * i, u[i], f[i]), apply(2 * i + 1, u[i], f[i]);
         }
-        if (l >= x && r <= y) {
-            return info[p];
+        u[i] = f[i] = 0;
+    }
+
+    void update(int l, int r, T x, bool _insert, int i = 1) {
+        if (l <= a[i] && r >= b[i]) {
+            apply(i, x, _insert);
         }
-        int m = (l + r) / 2;
-        push(p);
-        return rangeQuery(2 * p, l, m, x, y) + rangeQuery(2 * p + 1, m, r, x, y);
-    }
-    Info rangeQuery(int l, int r) {
-        return rangeQuery(1, 0, n, l, r);
-    }
-    void rangeApply(int p, int l, int r, int x, int y, const Tag &v) {
-        if (l >= y || r <= x) {
+        push(i);
+        if (l > b[i] || r < a[i] || (l <= a[i] && r >= b[i])) {
             return;
         }
-        if (l >= x && r <= y) {
-            apply(p, v);
-            return;
-        }
-        int m = (l + r) / 2;
-        push(p);
-        rangeApply(2 * p, l, m, x, y, v);
-        rangeApply(2 * p + 1, m, r, x, y, v);
-        pull(p);
+        update(l, r, x, _insert, 2 * i);
+        update(l, r, x, _insert, 2 * i + 1);
+        tree[i] = merge(tree[2 * i], tree[2 * i + 1]);
     }
-    void rangeApply(int l, int r, const Tag &v) {
-        return rangeApply(1, 0, n, l, r, v);
+
+    node query(int l, int r, int i = 1) {
+        push(i);
+        if (l <= a[i] && r >= b[i]) {
+            return tree[i];
+        }
+        if (l > b[i] || r < a[i]) {
+            return {0, max_T, min_T};
+        }
+        return merge(query(l, r, 2 * i), query(l, r, 2 * i + 1));
     }
-    template<class F>
-    int findFirst(int p, int l, int r, int x, int y, F pred) {
-        if (l >= y || r <= x || !pred(info[p])) {
-            return -1;
+
+    T get(int i) {
+        for (int x = H; x >= 0; x--) {
+            push((_N + i) >> x);
         }
-        if (r - l == 1) {
-            return l;
-        }
-        int m = (l + r) / 2;
-        push(p);
-        int res = findFirst(2 * p, l, m, x, y, pred);
-        if (res == -1) {
-            res = findFirst(2 * p + 1, m, r, x, y, pred);
-        }
-        return res;
+        return tree[_N + i]._sum;
     }
-    template<class F>
-    int findFirst(int l, int r, F pred) {
-        return findFirst(1, 0, n, l, r, pred);
+
+    void set(int l, int r, T x) { 
+        update(l, r, x, 1); 
     }
-    template<class F>
-    int findLast(int p, int l, int r, int x, int y, F pred) {
-        if (l >= y || r <= x || !pred(info[p])) {
-            return -1;
-        }
-        if (r - l == 1) {
-            return l;
-        }
-        int m = (l + r) / 2;
-        push(p);
-        int res = findLast(2 * p + 1, m, r, x, y, pred);
-        if (res == -1) {
-            res = findLast(2 * p, l, m, x, y, pred);
-        }
-        return res;
+    void add(int l, int r, T x) { 
+        update(l, r, x, 0); 
     }
-    template<class F>
-    int findLast(int l, int r, F pred) {
-        return findLast(1, 0, n, l, r, pred);
+    void set(int i, T x) { 
+        set(i, i, x); 
+    }
+    void add(int i, T x) { 
+        add(i, i, x);
+    }
+    T sum(int l, int r) { 
+        return query(l, r)._sum; 
+    }
+    T min(int l, int r) { 
+        return query(l, r)._min;
+    }
+    T max(int l, int r) { 
+        return query(l, r)._max;
     }
 };
- 
-struct Tag {
-    i64 k = 0;
-    i64 b = 0;
-    
-    void apply(const Tag &t) {
-        if (t.k < 0) {
-            k = t.k;
-            b = t.b;
-        }
-    }
-};
- 
-struct Info {
-    i64 cnt = 0;
-    i64 sid = 0;
-    i64 sum = 0;
-    
-    void apply(const Tag &t) {
-        if (t.k < 0) {
-            sum = sid * t.k + cnt * t.b;
-        }
-    }
-};
- 
-Info operator+(const Info &a, const Info &b) {
-    return {a.cnt + b.cnt, a.sid + b.sid, a.sum + b.sum};
-}
+
+LazySegmentTree<N, int> st;
 
 int main() {
     
